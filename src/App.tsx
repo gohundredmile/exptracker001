@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect } from 'react';
+import { useAuth } from './lib/AuthContext';
 import { useStore } from './store/useStore';
 import { OnboardingScreen } from './screens/OnboardingScreen';
 import { HomeScreen } from './screens/HomeScreen';
@@ -20,10 +21,31 @@ import { BillsScreen } from './screens/BillsScreen';
 import { BottomNav } from './components/layout/BottomNav';
 import { AddTransactionScreen } from './screens/AddTransactionScreen';
 import { Modal } from './components/ui/Modal';
+import { useState } from 'react';
 
 const AppContent: React.FC = () => {
+  const { user, isLoading } = useAuth();
   const { onboardingCompleted, isAuthenticated, activeScreen } = useStore();
   const [showAddTransaction, setShowAddTransaction] = useState(false);
+
+  // Sync auth state with store
+  useEffect(() => {
+    if (user && !isAuthenticated) {
+      // User is authenticated in Supabase but not in store
+      // You can load user data from Supabase here
+    }
+  }, [user, isAuthenticated]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-4xl mb-4">⏳</div>
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!onboardingCompleted || !isAuthenticated) {
     return <OnboardingScreen />;

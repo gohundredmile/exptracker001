@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { ChevronRight, Shield, TrendingUp, PieChart, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../lib/AuthContext';
 import { useStore } from '../store/useStore';
+import { ChevronRight, Shield, TrendingUp, PieChart, CheckCircle, AlertCircle } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 
 const slides = [
@@ -35,19 +36,24 @@ const features = [
 ];
 
 export const OnboardingScreen: React.FC = () => {
+  const { signUp, signIn, isLoading } = useAuth();
+  const { setAuthenticated, setPinVerified, completeOnboarding, updateProfile } = useStore();
+  
   const [currentSlide, setCurrentSlide] = useState(0);
   const [showLogin, setShowLogin] = useState(false);
   const [showSignup, setShowSignup] = useState(false);
   const [showPin, setShowPin] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
   const [pinStage, setPinStage] = useState<'enter' | 'confirm'>('enter');
+  
+  // Form states
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
-  const { setAuthenticated, setPinVerified, completeOnboarding, updateProfile } = useStore();
 
   const handleNext = () => {
     if (currentSlide < slides.length - 1) {
@@ -57,19 +63,52 @@ export const OnboardingScreen: React.FC = () => {
     }
   };
 
-  const handleLogin = () => {
-    if (loginEmail && loginPassword) {
-      setAuthenticated(true);
-      setPinVerified(true);
-      completeOnboarding();
+  const handleLogin = async () => {
+    if (!loginEmail || !loginPassword) {
+      setError('Please enter email and password');
+      return;
+    }
+
+    setError(null);
+    const { error: authError } = await signIn(loginEmail, loginPassword);
+
+    if (authError) {
+      setError(authError.message || 'Failed to sign in');
+    } else {
+      // Auth successful, proceed to PIN
+      setShowPin(true);
+      setShowLogin(false);
+      setPinStage('enter');
+      setPin('');
+      setConfirmPin('');
     }
   };
 
-  const handleSignup = () => {
-    if (name && email && password) {
+  const handleSignup = async () => {
+    if (!name || !email || !password) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters');
+      return;
+    }
+
+    setError(null);
+    const { error: authError } = await signUp(email, password, name);
+
+    if (authError) {
+      setError(authError.message || 'Failed to create account');
+    } else {
+      // Account created, go to PIN setup
       updateProfile({ full_name: name, email });
       setShowSignup(false);
       setShowPin(true);
+      setPinStage('enter');
+      setPin('');
+      setConfirmPin('');
+      setError(null);
     }
   };
 
@@ -91,6 +130,8 @@ export const OnboardingScreen: React.FC = () => {
             completeOnboarding();
           } else {
             setConfirmPin('');
+            setError('PINs do not match');
+            setTimeout(() => setError(null), 2000);
           }
         }, 300);
       }
@@ -105,6 +146,7 @@ export const OnboardingScreen: React.FC = () => {
   const slide = slides[currentSlide];
   const currentPinValue = pinStage === 'enter' ? pin : confirmPin;
 
+  // PIN Setup Screen
   if (showPin) {
     return (
       <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center p-6">
@@ -116,6 +158,13 @@ export const OnboardingScreen: React.FC = () => {
           <p className="text-gray-400 mb-10 text-sm">
             {pinStage === 'enter' ? 'Choose a 4-digit PIN to secure your app' : 'Enter your PIN again to confirm'}
           </p>
+
+          {error && (
+            <div className="mb-6 p-3 bg-red-500/20 border border-red-500/50 rounded-lg flex items-center gap-2 text-red-400 text-sm">
+              <AlertCircle size={16} />
+              {error}
+            </div>
+          )}
 
           {/* PIN Dots */}
           <div className="flex justify-center gap-4 mb-12">
@@ -133,7 +182,7 @@ export const OnboardingScreen: React.FC = () => {
 
           {/* Keypad */}
           <div className="grid grid-cols-3 gap-4 max-w-xs mx-auto">
-            {['1','2','3','4','5','6','7','8','9','','0','⌫'].map((key, i) => (
+            {['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', '⌫'].map((key, i) => (
               <button
                 key={i}
                 onClick={() => key === '⌫' ? handlePinDelete() : key && handlePinInput(key)}
@@ -152,6 +201,7 @@ export const OnboardingScreen: React.FC = () => {
     );
   }
 
+  // Sign Up Screen
   if (showSignup) {
     return (
       <div className="min-h-screen bg-gray-950 flex flex-col p-6">
@@ -161,6 +211,13 @@ export const OnboardingScreen: React.FC = () => {
           <h2 className="text-3xl font-bold text-white mb-1">Create Account</h2>
           <p className="text-gray-400 mb-8">Start your financial journey today</p>
 
+          {error && (
+            <div className="mb-6 p-3 bg-red-500/20 border border-red-500/50 rounded-lg flex items-center gap-2 text-red-400 text-sm">
+              <AlertCircle size={16} />
+              {error}
+            </div>
+          )}
+
           <div className="space-y-4">
             <div>
               <label className="text-sm text-gray-400 mb-1.5 block">Full Name</label>
@@ -169,7 +226,8 @@ export const OnboardingScreen: React.FC = () => {
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Alex Johnson"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-indigo-500 transition-colors"
+                disabled={isLoading}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-indigo-500 transition-colors disabled:opacity-50"
               />
             </div>
             <div>
@@ -179,7 +237,8 @@ export const OnboardingScreen: React.FC = () => {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 placeholder="alex@example.com"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-indigo-500 transition-colors"
+                disabled={isLoading}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-indigo-500 transition-colors disabled:opacity-50"
               />
             </div>
             <div>
@@ -189,13 +248,15 @@ export const OnboardingScreen: React.FC = () => {
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-indigo-500 transition-colors"
+                disabled={isLoading}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-indigo-500 transition-colors disabled:opacity-50"
               />
+              <p className="text-xs text-gray-500 mt-1">Minimum 6 characters</p>
             </div>
           </div>
 
-          <Button onClick={handleSignup} className="mt-8 w-full py-4" size="lg">
-            Create Account
+          <Button onClick={handleSignup} disabled={isLoading} className="mt-8 w-full py-4" size="lg">
+            {isLoading ? 'Creating account...' : 'Create Account'}
           </Button>
 
           <p className="text-gray-500 text-sm text-center mt-4">
@@ -207,6 +268,7 @@ export const OnboardingScreen: React.FC = () => {
     );
   }
 
+  // Sign In Screen
   if (showLogin) {
     return (
       <div className="min-h-screen bg-gray-950 flex flex-col p-6">
@@ -216,6 +278,13 @@ export const OnboardingScreen: React.FC = () => {
           <h2 className="text-3xl font-bold text-white mb-1">Welcome Back</h2>
           <p className="text-gray-400 mb-8">Sign in to your account</p>
 
+          {error && (
+            <div className="mb-6 p-3 bg-red-500/20 border border-red-500/50 rounded-lg flex items-center gap-2 text-red-400 text-sm">
+              <AlertCircle size={16} />
+              {error}
+            </div>
+          )}
+
           <div className="space-y-4">
             <div>
               <label className="text-sm text-gray-400 mb-1.5 block">Email</label>
@@ -224,7 +293,8 @@ export const OnboardingScreen: React.FC = () => {
                 value={loginEmail}
                 onChange={e => setLoginEmail(e.target.value)}
                 placeholder="alex@example.com"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-indigo-500 transition-colors"
+                disabled={isLoading}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-indigo-500 transition-colors disabled:opacity-50"
               />
             </div>
             <div>
@@ -234,16 +304,17 @@ export const OnboardingScreen: React.FC = () => {
                 value={loginPassword}
                 onChange={e => setLoginPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-indigo-500 transition-colors"
+                disabled={isLoading}
+                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 outline-none focus:border-indigo-500 transition-colors disabled:opacity-50"
               />
             </div>
           </div>
 
-          <Button onClick={handleLogin} className="mt-8 w-full py-4" size="lg">
-            Sign In
+          <Button onClick={handleLogin} disabled={isLoading} className="mt-8 w-full py-4" size="lg">
+            {isLoading ? 'Signing in...' : 'Sign In'}
           </Button>
 
-          {/* Quick Demo Access */}
+          {/* Demo Access */}
           <button
             onClick={() => { setAuthenticated(true); setPinVerified(true); completeOnboarding(); }}
             className="mt-4 w-full py-3 rounded-xl border border-white/10 text-gray-300 text-sm hover:bg-white/5 transition-colors"
@@ -260,6 +331,7 @@ export const OnboardingScreen: React.FC = () => {
     );
   }
 
+  // Onboarding Slides
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col overflow-hidden">
       {/* Background Gradient */}
